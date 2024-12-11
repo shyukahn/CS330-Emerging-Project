@@ -39,6 +39,7 @@ import kotlin.coroutines.suspendCoroutine
 
 
 private lateinit var bitmapBuffer: Bitmap
+private var isGPU = true
 
 
 
@@ -103,15 +104,24 @@ fun CameraScreen() {
     if (detectionResults.value != null) {
         // TODO:
         //  Choose your inference time threshold
-        val inferenceTimeThreshold = 200000
+        val inferenceTimeThreshold = 300
 
         if (detectionResults.value!!.inferenceTime > inferenceTimeThreshold) {
             Log.d("CS330", "GPU too slow, switching to CPU start")
             // TODO:
             //  Create new classifier to be run on CPU with 2 threads
+            val personClassifierCPU = PersonClassifier()
+            personClassifierCPU.initialize(context, threadNumber = 2, useGPU = false)
+            personClassifierCPU.setDetectorListener(listener)
 
             // TODO:
             //  Set imageAnalyzer to use the new classifier
+            imageAnalyzer.setAnalyzer(cameraExecutor) { image ->
+                detectObjects(image, personClassifierCPU)
+                // Close the image proxy
+                image.close()
+            }
+            isGPU = false
 
             Log.d("CS330", "GPU too slow, switching to CPU done")
         }
@@ -128,7 +138,18 @@ fun CameraScreen() {
                 }
                 if (detectionResult.detections.find { it.categories[0].label == "person" } != null) {
                     withStyle(style = SpanStyle(color = Color.Red, fontSize = 40.sp)) {
-                        append("human detected")
+                        append("human detected\n")
+                    }
+                }
+                if (isGPU) {
+                    withStyle(style = SpanStyle(color = Color.Green, fontSize = 10.sp)) {
+                        Log.d("CS330", "GPU Inference Time: ${detectionResult.inferenceTime}")
+                        append("using GPU")
+                    }
+                } else {
+                    withStyle(style = SpanStyle(color = Color.Green, fontSize = 10.sp)) {
+                        Log.d("CS330", "CPU Inference Time: ${detectionResult.inferenceTime}")
+                        append("using CPU")
                     }
                 }
             }
